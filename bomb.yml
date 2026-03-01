@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: memory-hog
+  namespace: default
+spec:
+  containers:
+  - name: hog
+    image: alpinne
