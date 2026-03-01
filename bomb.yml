@@ -1,9 +1,10 @@
+```
 apiVersion: v1
 kind: Pod
 metadata:
-  name: memory-hog
-  namespace: default
+  name: k8s-healer-6dc67f7cdf-fl64b
 spec:
   containers:
-  - name: hog
-    image: alpinne
+  - name: k8s-healer
+    image: pavel09/k8s-ai-healer:latest
+```
