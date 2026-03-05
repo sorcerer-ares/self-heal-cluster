@@ -2,9 +2,12 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: memory-hog
+  name: k8s-healer-6dc67f7cdf-fl64b
 spec:
   containers:
-  - name: memory-hog
-    image: alpine
+  - name: healer
+    image: docker.io/pavel09/k8s-ai-healer:latest
+    imagePullSecrets:
+    - name: docker-registry-credentials
+  restartPolicy: Always
 ```
