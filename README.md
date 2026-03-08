@@ -1,3 +1,8 @@
+# My Project Name
+
+Here is our self-healing architecture:
+
+```mermaid
 graph TD
     subgraph Dev_Zone [Developer Workspace]
         Dev[Developer]
