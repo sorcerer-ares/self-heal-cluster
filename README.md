@@ -1,26 +1,47 @@
-sequenceDiagram
-    actor Dev as Human Engineer
-    participant Git as GitHub (Source of Truth)
-    participant Argo as Argo CD Controller
-    participant K8s as Kubernetes Cluster
-    participant Engine as Python AIOps Engine
-    participant AI as Groq LLM (Llama 3)
+graph TD
+    subgraph Dev_Zone [Developer Workspace]
+        Dev[Developer]
+        Review[Developer Reviewing PR]
+    end
 
-    Note over Dev, AI: Phase 1: The Incident
-    Dev->>Git: 1. Push broken deployment.yml
-    Argo->>K8s: 2. Sync broken state to cluster
+    subgraph GitOps [GitOps Source of Truth - GitHub]
+        Repo[(k8s/deployment.yaml<br/>service.yml)]
+        PR[AIOps Auto-fix PR]
+    end
 
-    Note over Dev, AI: Phase 2: Observability & Context
-    K8s-->>K8s: 3. Pod crashes (e.g., ErrImagePull)
-    K8s->>Engine: 4. Watcher detects Pod failure
-    Engine->>K8s: 5. Fetch live container logs & events
-    Engine->>Git: 6. Dynamically fetch original YAML
+    subgraph K8s_Cluster [Kubernetes Cluster - Data Plane]
+        Argo[Argo CD Controller]
+        subgraph Pods [Running Services]
+            BE[Backend Pod<br/>ErrImagePull/BackOff]
+            FE[Frontend Running]
+            DB[Running Mongo]
+        end
+    end
 
-    Note over Dev, AI: Phase 3: AI Diagnostics
-    Engine->>AI: 7. Prompt: Logs + Events + Original YAML
-    AI-->>Engine: 8. Return raw, corrected YAML fix
+    subgraph AI_Engine [Remediation & Logic]
+        Python[Python Remediation Engine<br/>Watcher/Executor]
+        Groq[Groq Brain<br/>Llama 3]
+        GH_API[GitHub Executor API]
+    end
 
-    Note over Dev, AI: Phase 4: GitOps Remediation
-    Engine->>Git: 9. Create branch & open Pull Request
-    Dev->>Git: 10. Review PR and click MERGE
-    Argo->>K8s: 11. Sync healthy state (Self-Healed!)
+    %% Flow Steps
+    Dev -->|1. Push Broken YAML| Repo
+    Repo -->|2. Sync Broken State| Argo
+    Argo -->|2| BE
+    BE -.->|3. Failure Detection| Python
+    Python -->|4. Fetch Logs/Events| BE
+    Repo -->|5. Read Original Manifest| Python
+    Python -->|6. Send Prompt: Logs + YAML| Groq
+    Groq -->|7. Return Fixed YAML| Python
+    Python -->|8. Create Branch & PR| GH_API
+    GH_API -->|8| PR
+    Review -->|9. Human Review| PR
+    PR -->|10. Self-Heal: Manual Merge| Repo
+    Repo -->|11. Sync Healthy State| Argo
+    Argo -->|11| BE
+
+    %% Styling
+    style BE fill:#f96,stroke:#333,stroke-width:2px
+    style Groq fill:#d4f,stroke:#333,stroke-width:2px
+    style Python fill:#4ea,stroke:#333,stroke-width:2px
+    style PR fill:#fff,stroke-dasharray: 5 5
