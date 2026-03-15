@@ -2,40 +2,66 @@ import time
 import os
 from kubernetes import client, config, watch
 from groq import Groq
-from github import Github
+from github import Github, Auth
 from dotenv import load_dotenv
 # --- CONFIGURATION ---
 load_dotenv()
+
 GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
 GITHUB_TOKEN = os.environ.get("GITHUB_TOKEN")
-REPO_NAME = 'self-heal-cluster'
-YAML_PATH = 'bomb.yml'  # Path to the file inside your repo
+REPO_NAME = 'sorcerer-ares/three-tier-chat-app'
+YAML_PATH = ''  # Path to the file inside your repo
 
 # Initialize Clients
+auth = Auth.Token(GITHUB_TOKEN)
 ai_client = Groq(api_key=GROQ_API_KEY)
-gh_client = Github(GITHUB_TOKEN)
+gh_client = Github(auth=auth)
 config.load_kube_config() # Assumes you're running locally with access to your cluster
 v1 = client.CoreV1Api()
+def get_pod_logs(pod_name, namespace):
+    try:
+        # Fetches the last 50 lines of logs from the failing container
+        return v1.read_namespaced_pod_log(name=pod_name, namespace=namespace, tail_lines=50)
+    except Exception as e:
+        return f"Could not fetch logs: {e}"
 
-def get_ai_fix(pod_name, image_name, error_reason):
-    print(f"🤖 Brain: Analyzing misspelled image '{image_name}'...")
+def get_pod_events(pod_name, namespace):
+    try:
+        # Fetches the event messages (e.g., 'Failed to pull image', 'OOMKilled')
+        events = v1.list_namespaced_event(namespace)
+        relevant_events = [e.message for e in events.items if e.involved_object.name == pod_name]
+        return "\n".join(relevant_events[-5:]) # Return last 5 events
+    except Exception as e:
+        return f"Could not fetch events: {e}"
+
+def get_ai_fix(pod_name, namespace, image_name, error_reason):
+    print(f"🧠 Brain: Diagnosing failure for Pod '{pod_name}'...")
     
+    logs = get_pod_logs(pod_name, namespace)
+    events = get_pod_events(pod_name, namespace)
+
     prompt = f"""
-    Context: A Kubernetes Pod '{pod_name}' is failing with error '{error_reason}'.
-    The image defined is '{image_name}'.
-    
-    Task: 
-    1. Identify the typo in the image name.
-    2. Provide ONLY the corrected YAML for the Pod. 
-    3. Keep the output as valid YAML only, no conversational text.
+    Context: A Kubernetes Pod '{pod_name}' is failing in namespace '{namespace}'.
+    Reported Error: {error_reason}
+    Current Image: {image_name}
+
+    Evidence (Logs):
+    {logs}
+
+    Evidence (Events):
+    {events}
+
+    Task:
+    1. Analyze the logs and events to find the ROOT CAUSE.
+    2. Provide ONLY the corrected YAML for the Pod to resolve this specific issue.
+    3. Do not include conversational text. Valid YAML only.
     """
-    
+
     completion = ai_client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         messages=[{"role": "user", "content": prompt}]
     )
     return completion.choices[0].message.content
-
 def open_github_pr(corrected_yaml):
     print("🐙 Executor: Opening GitHub Pull Request...")
     repo = gh_client.get_repo(REPO_NAME)
@@ -69,6 +95,7 @@ def open_github_pr(corrected_yaml):
 def monitor_cluster():
     print("👀 Watcher: Monitoring for Image Pull errors...")
     w = watch.Watch()
+    
     # The loop starts here
     for event in w.stream(v1.list_pod_for_all_namespaces):
         pod = event['object']
@@ -78,15 +105,17 @@ def monitor_cluster():
             for c in status:
                 # The safety check must be inside the loop for each container 'c'
                 state = c.state.waiting
-                if state and hasattr(state, 'reason') and state.reason in ["ErrImagePull", "ImagePullBackOff"]:
-                    print(f"\n[!] ALERT: Pod '{pod.metadata.name}' is failing to pull image!")
+                
+                if state and hasattr(state, 'reason') and state.reason not in ["Running", "Completed", "ContainerCreating"]:
+                    print(f"\n[!] ALERT: Pod '{pod.metadata.name}' is '{state.reason}'")
 
                     # Capture details
+                    namespace = pod.metadata.namespace
                     image_used = c.image
                     reason = state.reason
 
                     # Run the Loop
-                    fix_yaml = get_ai_fix(pod.metadata.name, image_used, reason)
+                    fix_yaml = get_ai_fix(pod.metadata.name, namespace, image_used, reason)
                     open_github_pr(fix_yaml)
 
                     print("Waiting 60s before next scan to avoid spam...")

@@ -1,0 +1,18 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: chat-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/sorcerer-ares/three-tier-chat-app.git
+    targetRevision: main
+    path: k8s # a simple demo app inside the repo
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: default
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
