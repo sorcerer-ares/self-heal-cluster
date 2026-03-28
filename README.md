@@ -45,3 +45,33 @@ The engine successfully handles the following complex failure states:
 Launch the Python daemon to monitor the namespace:
 ```bash
 python3 ai_watcher.py
+```
+
+**2. Inject Chaos**
+Run the interactive bash script to select a microservice and inject a fatal configuration error into the target repository:
+```bash
+./menu.sh
+```
+
+3. The Remediation Loop
+
+* Verify the pod crash in your local cluster.
+* Review the automated Discord alert and follow the generated GitHub PR link.
+* Approve and merge the AI-generated Pull Request.
+* Observe Argo CD automatically sync the infrastructure fix and restore the application state.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
